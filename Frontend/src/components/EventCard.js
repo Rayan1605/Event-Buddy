@@ -2,6 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/styles';
+import { getValidImageUrl } from '../utils/imageUtils';
+
+// Default placeholder image URL
+const DEFAULT_IMAGE = 'https://placehold.co/600x400?text=Event+Image';
 
 const EventCard = ({ event, onPress }) => {
   // Format date to be more readable
@@ -22,7 +26,7 @@ const EventCard = ({ event, onPress }) => {
       activeOpacity={0.7}
     >
       <Image 
-        source={{ uri: event.imageUrl }} 
+        source={{ uri: getValidImageUrl(event.image || event.imageUrl) || DEFAULT_IMAGE }} 
         style={styles.image}
         resizeMode="cover"
       />

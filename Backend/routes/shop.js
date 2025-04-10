@@ -4,6 +4,7 @@ require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+const path = require('path');
 
 // ============ USER SCHEMA ============
 const userSchema = new Schema({
@@ -30,6 +31,7 @@ const EventSchema = new Schema({
   location: { type: String, required: false },
   date: { type: Date, required: false },
   image: { type: String, required: false },
+  imageFilename: { type: String, required: false },
   ourId: { type: String, required: true },
 });
 const Event = mongoose.model('Event', EventSchema);
@@ -183,6 +185,37 @@ router.post('/joinEvent', checkAuth, async (req, res) => {
   }
 });
 
+// ============ IMAGE UPLOAD ROUTE ============
+router.post('/upload-image', checkAuth, (req, res) => {
+  // Use the upload middleware from app.js
+  req.upload.single('image')(req, res, function(err) {
+    if (err) {
+      console.error('Upload error:', err);
+      return res.status(400).json({ 
+        success: false, 
+        message: err.message || 'Error uploading file' 
+      });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No file uploaded or file type not allowed' 
+      });
+    }
+    
+    // Create public URL for the image
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const imageUrl = baseUrl + '/uploads/' + req.file.filename;
+    
+    res.json({ 
+      success: true, 
+      imageUrl: imageUrl, 
+      filename: req.file.filename 
+    });
+  });
+});
+
 // ============ EVENT ROUTES ============
 
 router.post('/addEvent', checkAuth, async (req, res) => {
@@ -197,6 +230,7 @@ router.post('/addEvent', checkAuth, async (req, res) => {
       date,
       endDate,
       imageUrl,
+      imageFilename,
       category,
       maxAttendees
     } = req.body;
@@ -207,8 +241,9 @@ router.post('/addEvent', checkAuth, async (req, res) => {
       description,
       location,
       date: new Date(date),
-      image: imageUrl || 'sample.jpg',
-      endDate: new Date(endDate),
+      image: imageUrl || 'https://placehold.co/600x400?text=No+Image',
+      imageFilename: imageFilename || null,
+      endDate: endDate ? new Date(endDate) : null,
       category,
       maxAttendees
     });
@@ -290,11 +325,100 @@ router.get('/updateSpecificEvent', checkAuth, async (req, res) => {
   }
 });
 
+// POST version for updating an event
+router.post('/updateSpecificEvent', checkAuth, async (req, res) => {
+  try {
+    const { ourId } = req.query;
+    if (!ourId) {
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
+    }
+
+    const event = await Event.findOne({ ourId });
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const user = await User.findOne({ userEmail: req.session.theUser.userEmail });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not logged in' });
+    }
+
+    // Check if the user created this event
+    const userOwnsEvent = user.createdEvents.some(id => id.toString() === event._id.toString());
+    if (!userOwnsEvent) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this event' });
+    }
+
+    // Update the event fields from the request body
+    const {
+      title,
+      description,
+      location,
+      date,
+      imageUrl,
+      imageFilename
+    } = req.body;
+
+    if (title) event.title = title;
+    if (description) event.description = description;
+    if (location) event.location = location;
+    if (date) event.date = new Date(date);
+    if (imageUrl) event.image = imageUrl;
+    if (imageFilename) event.imageFilename = imageFilename;
+
+    await event.save();
+    console.log('Event updated successfully');
+    res.json({ success: true, message: 'Event updated', event });
+  } catch (err) {
+    console.error('Error updating event:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Delete event (protected)
 router.get('/deleteSpecificEvent', checkAuth, (req, res) => {
   Event.findOneAndRemove({ ourId: '0' })
     .then(resp => res.redirect('/'))
     .catch(err => res.send('No event found'));
+});
+
+// POST version for deleting an event
+router.post('/deleteSpecificEvent', checkAuth, async (req, res) => {
+  try {
+    const { ourId } = req.query;
+    
+    if (!ourId) {
+      return res.status(400).json({ success: false, message: 'Event ID is required' });
+    }
+
+    const event = await Event.findOne({ ourId });
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const user = await User.findOne({ userEmail: req.session.theUser.userEmail });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not logged in' });
+    }
+
+    // Check if the user created this event
+    const userOwnsEvent = user.createdEvents.some(id => id.toString() === event._id.toString());
+    if (!userOwnsEvent) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this event' });
+    }
+
+    // Remove the event
+    await Event.findOneAndRemove({ _id: event._id });
+    
+    // Remove the event from user's createdEvents array
+    user.createdEvents = user.createdEvents.filter(id => id.toString() !== event._id.toString());
+    await user.save();
+
+    res.json({ success: true, message: 'Event deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting event:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 });
 
 router.get('/myCreatedEvents', checkAuth, async (req, res) => {

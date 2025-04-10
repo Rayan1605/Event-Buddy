@@ -16,7 +16,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, baseStyles } from '../utils/styles';
+import { getValidImageUrl } from '../utils/imageUtils';
 import { fetchEventById, joinEvent, leaveEvent } from '../api/api';
+
+// Default placeholder image URL
+const DEFAULT_IMAGE = 'https://placehold.co/600x400?text=Event+Image';
 
 const EventDetailsScreen = ({ route, navigation }) => {
   const { eventId } = route.params;
@@ -197,7 +201,7 @@ const EventDetailsScreen = ({ route, navigation }) => {
         </View>
         
         <Image
-          source={{ uri: event.imageUrl }}
+          source={{ uri: getValidImageUrl(event.image) || DEFAULT_IMAGE }}
           style={styles.coverImage}
           resizeMode="cover"
         />
@@ -251,8 +255,9 @@ const EventDetailsScreen = ({ route, navigation }) => {
               <Text style={styles.sectionTitle}>Organizer</Text>
               <View style={styles.organizerRow}>
                 <Image
-                  source={{ uri: event.organizer.imageUrl }}
+                  source={{ uri: event.organizerImage || DEFAULT_IMAGE }}
                   style={styles.organizerImage}
+                  resizeMode="cover"
                 />
                 <View style={styles.organizerInfo}>
                   <Text style={styles.organizerName}>{event.organizer.name}</Text>

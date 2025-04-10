@@ -28,16 +28,36 @@ const CreateEventScreen = ({ navigation }) => {
         [
           {
             text: 'View Event',
-            onPress: () => navigation.navigate('EventDetails', { eventId: newEvent.id }),
+            onPress: () => {
+              // Navigate to Home first to trigger refresh, then to event details
+              navigation.navigate('MainTabs', { 
+                screen: 'Home',
+                params: { refresh: Date.now() }  
+              });
+              // Use a small delay to allow Home to refresh first
+              setTimeout(() => {
+                navigation.navigate('EventDetails', { eventId: newEvent.id || newEvent.ourId });
+              }, 100);
+            },
           },
           {
             text: 'Create Another',
-            onPress: () => navigation.setParams({ refresh: Date.now() }),
+            onPress: () => {
+              // Reset this screen
+              setLoading(false);
+              navigation.setParams({ refresh: Date.now() });
+            },
             style: 'cancel',
           },
           { 
             text: 'Go to Home',
-            onPress: () => navigation.navigate('Home')
+            onPress: () => {
+              // Navigate to Home with refresh trigger
+              navigation.navigate('MainTabs', { 
+                screen: 'Home',
+                params: { refresh: Date.now() }  
+              });
+            }
           },
         ]
       );

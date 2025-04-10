@@ -7,23 +7,31 @@ import {
   Platform,
   TouchableOpacity,
   StyleSheet,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, baseStyles } from '../utils/styles';
+import * as ImagePicker from 'expo-image-picker';
 
 const EventForm = ({ onSubmit, initialValues = {} }) => {
   const [title, setTitle] = useState(initialValues.title || '');
   const [description, setDescription] = useState(initialValues.description || '');
   const [location, setLocation] = useState(initialValues.location || '');
   const [date, setDate] = useState(initialValues.date ? new Date(initialValues.date) : new Date());
+  const [imageUri, setImageUri] = useState(initialValues.imageUrl || initialValues.image || null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   
   // Form validation states
   const [titleError, setTitleError] = useState('');
   const [descriptionError, setDescriptionError] = useState('');
   const [locationError, setLocationError] = useState('');
+  
+  // Track if the image is from a remote URL
+  const [isRemoteImage, setIsRemoteImage] = useState(
+    !!initialValues.image || !!initialValues.imageUrl
+  );
   
   const validateForm = () => {
     let isValid = true;
@@ -66,6 +74,28 @@ const EventForm = ({ onSubmit, initialValues = {} }) => {
       date: date.toISOString(),
     };
     
+    // Handle image differently based on whether it's from a remote URL or local uri
+    if (imageUri) {
+      if (isRemoteImage && imageUri === (initialValues.image || initialValues.imageUrl)) {
+        // If using the original remote image, preserve it
+        if (initialValues.image) {
+          eventData.image = initialValues.image;
+        } else {
+          eventData.imageUrl = initialValues.imageUrl;
+        }
+        // Also preserve the filename if available
+        if (initialValues.imageFilename) {
+          eventData.imageFilename = initialValues.imageFilename;
+        }
+      } else {
+        // If using a newly selected image
+        eventData.imageUri = imageUri;
+      }
+    } else {
+      // No image selected
+      eventData.imageUrl = 'https://placehold.co/600x400?text=No+Image';
+    }
+    
     onSubmit(eventData);
   };
 
@@ -84,6 +114,59 @@ const EventForm = ({ onSubmit, initialValues = {} }) => {
     const currentDate = selectedDate || date;
     setShowDatePicker(Platform.OS === 'ios');
     setDate(currentDate);
+  };
+
+  const pickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permission to upload an image.');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImageUri(result.assets[0].uri);
+        setIsRemoteImage(false); // New image selected is not remote
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera permission to take a photo.');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImageUri(result.assets[0].uri);
+        setIsRemoteImage(false); // New photo taken is not remote
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
   };
 
   return (
@@ -109,7 +192,11 @@ const EventForm = ({ onSubmit, initialValues = {} }) => {
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Description</Text>
-          <View style={[styles.inputContainer, descriptionError ? styles.inputContainerError : null]}>
+          <View style={[
+            styles.inputContainer, 
+            styles.textAreaContainer,
+            descriptionError ? styles.inputContainerError : null
+          ]}>
             <Ionicons 
               name="document-text-outline" 
               size={22} 
@@ -172,11 +259,52 @@ const EventForm = ({ onSubmit, initialValues = {} }) => {
           )}
         </View>
 
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Event Image</Text>
+          
+          {imageUri ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+              <TouchableOpacity 
+                style={styles.removeImageButton}
+                onPress={() => setImageUri(null)}
+              >
+                <Ionicons name="close-circle" size={24} color={colors.error} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={48} color={colors.text.secondary} />
+              <Text style={styles.imagePlaceholderText}>No image selected</Text>
+            </View>
+          )}
+          
+          <View style={styles.imageButtonsContainer}>
+            <TouchableOpacity 
+              style={[styles.imageButton, { marginRight: 8 }]} 
+              onPress={pickImage}
+            >
+              <Ionicons name="images-outline" size={20} color={colors.text.inverse} style={{ marginRight: 8 }} />
+              <Text style={styles.imageButtonText}>Pick from Gallery</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.imageButton} 
+              onPress={takePhoto}
+            >
+              <Ionicons name="camera-outline" size={20} color={colors.text.inverse} style={{ marginRight: 8 }} />
+              <Text style={styles.imageButtonText}>Take Photo</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity 
           style={styles.submitButton}
           onPress={handleSubmit}
         >
-          <Text style={styles.submitButtonText}>Create Event</Text>
+          <Text style={styles.submitButtonText}>
+            {initialValues._id || initialValues.id || initialValues.ourId ? 'Update Event' : 'Create Event'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -208,6 +336,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
     borderRadius: 8,
     height: 50,
+  },
+  textAreaContainer: {
+    height: 120,
+    alignItems: 'flex-start',
   },
   inputContainerError: {
     borderColor: colors.error,
@@ -247,6 +379,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.primary,
     marginLeft: 12,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  imagePlaceholderText: {
+    color: colors.text.secondary,
+    marginTop: 8,
+    fontSize: 14,
+  },
+  imageButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  imageButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageButtonText: {
+    color: colors.text.inverse,
+    fontSize: 14,
+    fontWeight: '500',
   },
   submitButton: {
     backgroundColor: colors.primary,

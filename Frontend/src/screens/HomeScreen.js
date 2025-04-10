@@ -16,7 +16,7 @@ import { colors, baseStyles } from '../utils/styles';
 import EventCard from '../components/EventCard';
 import { fetchEvents } from '../api/api';
 
-const HomeScreen = ({ navigation }) => {
+const HomeScreen = ({ navigation, route }) => {
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,9 +24,31 @@ const HomeScreen = ({ navigation }) => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Watch for refresh params from navigation
+  useEffect(() => {
+    if (route.params?.refresh) {
+      console.log('Refresh param detected:', route.params.refresh);
+      setRefreshing(true);
+      loadEvents();
+      // Clear the parameter after use to prevent unnecessary refreshes
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route.params?.refresh]);
+
   useEffect(() => {
     loadEvents();
-  }, []);
+    
+    // Add a listener for when the screen comes into focus
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('HomeScreen focused - refreshing events');
+      // Don't show the loading indicator when refreshing on focus
+      setRefreshing(true);
+      loadEvents();
+    });
+    
+    // Return the cleanup function to unsubscribe from the event
+    return unsubscribe;
+  }, [navigation]);
 
   // Filter events when search query changes
   useEffect(() => {

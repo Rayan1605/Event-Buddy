@@ -29,6 +29,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to set event images.",
+          "cameraPermission": "The app needs access to your camera to take event photos."
+        }
+      ]
+    ],
     "newArchEnabled": true
   }
 }
