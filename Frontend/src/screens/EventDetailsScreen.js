@@ -16,13 +16,15 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, baseStyles } from '../utils/styles';
-import { fetchEventById } from '../api/api';
+import { fetchEventById, joinEvent, leaveEvent } from '../api/api';
 
 const EventDetailsScreen = ({ route, navigation }) => {
   const { eventId } = route.params;
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     loadEvent();
@@ -32,13 +34,67 @@ const EventDetailsScreen = ({ route, navigation }) => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching event with ID:', eventId);
+      
+      if (!eventId) {
+        setError('Event ID is missing');
+        setLoading(false);
+        return;
+      }
+      
+      // Use the fetchEventById function from the API
       const data = await fetchEventById(eventId);
-      setEvent(data);
+      console.log('Fetched event:', data);
+
+      if (data) {
+        // Extract the event data, handling both formats
+        const eventData = data.event || data;
+        setEvent(eventData);
+        // Check if user is already registered
+        setIsRegistered(eventData.isUserRegistered || false);
+      } else {
+        setError('Event not found');
+      }
+
     } catch (err) {
+      console.error('Error loading event:', err);
       setError('Failed to load event details. Please try again.');
-      console.error('Error loading event details:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!event) return;
+    
+    try {
+      setRegistering(true);
+      
+      if (isRegistered) {
+        // If already registered, leave the event
+        await leaveEvent(eventId);
+        Alert.alert(
+          'Success',
+          'You have successfully unregistered from this event.'
+        );
+        setIsRegistered(false);
+      } else {
+        // Register for the event
+        await joinEvent(eventId);
+        Alert.alert(
+          'Success',
+          'You have successfully registered for this event!'
+        );
+        setIsRegistered(true);
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      Alert.alert(
+        'Error',
+        `Failed to ${isRegistered ? 'unregister from' : 'register for'} the event. ${error.message || 'Please try again.'}`
+      );
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -219,8 +275,22 @@ const EventDetailsScreen = ({ route, navigation }) => {
             </View>
           )}
           
-          <TouchableOpacity style={styles.registerButton}>
-            <Text style={styles.registerButtonText}>Register for Event</Text>
+          <TouchableOpacity 
+            style={[
+              styles.registerButton,
+              isRegistered && styles.unregisterButton,
+              registering && styles.disabledButton
+            ]}
+            onPress={handleRegister}
+            disabled={registering}
+          >
+            {registering ? (
+              <ActivityIndicator color={colors.text.inverse} size="small" />
+            ) : (
+              <Text style={styles.registerButtonText}>
+                {isRegistered ? 'Unregister' : 'Register for Event'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -378,6 +448,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
     marginBottom: 32,
+  },
+  unregisterButton: {
+    backgroundColor: colors.error,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   registerButtonText: {
     color: colors.text.inverse,

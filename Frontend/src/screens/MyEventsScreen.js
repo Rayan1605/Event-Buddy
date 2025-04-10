@@ -9,55 +9,47 @@ import {
   RefreshControl,
   SafeAreaView,
   StatusBar,
-  TextInput
+  Alert
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, baseStyles } from '../utils/styles';
 import EventCard from '../components/EventCard';
-import { fetchEvents } from '../api/api';
+import { fetchUserEvents, logoutUser } from '../api/api';
 
-const HomeScreen = ({ navigation }) => {
+const MyEventsScreen = ({ navigation }) => {
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Dummy user ID for demonstration
+  const userId = '123';
 
   useEffect(() => {
     loadEvents();
-  }, []);
+    
+    // Add listener for navigation focus to refresh events when coming back to this screen
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadEvents();
+    });
 
-  // Filter events when search query changes
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredEvents(events);
-    } else {
-      const lowercasedQuery = searchQuery.toLowerCase();
-      const filtered = events.filter(event => 
-        event.title.toLowerCase().includes(lowercasedQuery) ||
-        event.description.toLowerCase().includes(lowercasedQuery) ||
-        event.location.toLowerCase().includes(lowercasedQuery) ||
-        (event.tags && event.tags.some(tag => tag.toLowerCase().includes(lowercasedQuery)))
-      );
-      setFilteredEvents(filtered);
-    }
-  }, [searchQuery, events]);
+    return unsubscribe;
+  }, [navigation]);
 
   const loadEvents = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchEvents();
+      const data = await fetchUserEvents(userId);
       
-      // Sort events by date (upcoming first)
-      const sortedEvents = data.sort((a, b) => new Date(a.date) - new Date(b.date));
+      // Sort events by date (newest first)
+      const sortedEvents = data.sort((a, b) => new Date(b.date) - new Date(a.date));
       
       setEvents(sortedEvents);
-      setFilteredEvents(sortedEvents);
     } catch (err) {
-      setError('Failed to load events. Please try again.');
-      console.error('Error loading events:', err);
+      setError('Failed to load your events. Please try again.');
+      console.error('Error loading user events:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -69,51 +61,71 @@ const HomeScreen = ({ navigation }) => {
     loadEvents();
   };
 
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Logout',
+          onPress: async () => {
+            try {
+              // Call logout API
+              await logoutUser();
+              
+              // Clear local storage
+              await AsyncStorage.removeItem('isLoggedIn');
+              await AsyncStorage.removeItem('userEmail');
+              
+              // Navigate to Auth screen
+              navigation.navigate('Auth');
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderEventItem = ({ item }) => (
     <EventCard
       event={item}
-      onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}
+      onPress={() => navigation.navigate('EventDetails', { eventId: item.ourId })}
     />
-  );
-
-  const renderHeader = () => (
-    <View style={styles.headerContainer}>
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.text.secondary} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events..."
-          placeholderTextColor={colors.text.disabled}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
   );
 
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="calendar-outline" size={64} color={colors.text.disabled} />
-      <Text style={styles.emptyTitle}>No Events Found</Text>
+      <Text style={styles.emptyTitle}>No Events Yet</Text>
       <Text style={styles.emptyMessage}>
-        {searchQuery.trim() !== '' 
-          ? 'No events match your search criteria.'
-          : 'There are no upcoming events at the moment.'}
+        You haven't created any events yet. Create your first event to see it here.
       </Text>
-      {searchQuery.trim() !== '' && (
-        <TouchableOpacity 
-          style={styles.clearSearchButton}
-          onPress={() => setSearchQuery('')}
-        >
-          <Text style={styles.clearSearchButtonText}>Clear Search</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity 
+        style={styles.createEventButton}
+        onPress={() => navigation.navigate('Create')}
+      >
+        <Text style={styles.createEventButtonText}>Create Event</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Add a renderHeader function that includes a logout button
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>My Events</Text>
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={24} color={colors.primary} />
+      </TouchableOpacity>
     </View>
   );
 
@@ -124,7 +136,7 @@ const HomeScreen = ({ navigation }) => {
         {renderHeader()}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading events...</Text>
+          <Text style={styles.loadingText}>Loading your events...</Text>
         </View>
       </SafeAreaView>
     );
@@ -149,13 +161,13 @@ const HomeScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      {renderHeader()}
       <FlatList
-        data={filteredEvents}
+        data={events}
         renderItem={renderEventItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.ourId || item.id || item._id || String(Math.random())}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmptyList}
         refreshControl={
           <RefreshControl 
@@ -175,32 +187,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerContainer: {
+  header: {
     padding: 16,
-    backgroundColor: colors.background,
-  },
-  searchContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.default,
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-    paddingHorizontal: 12,
-    height: 48,
+    justifyContent: 'center',
+    position: 'relative',
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
     color: colors.text.primary,
-    paddingVertical: 8,
+    textAlign: 'center',
   },
   listContainer: {
     padding: 16,
-    paddingTop: 0,
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -237,6 +242,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -255,17 +261,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
-  clearSearchButton: {
+  createEventButton: {
     backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
   },
-  clearSearchButtonText: {
+  createEventButtonText: {
     color: colors.text.inverse,
     fontSize: 16,
-    fontWeight: '500',
-  }
+    fontWeight: '600',
+  },
+  logoutButton: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+  },
 });
 
-export default HomeScreen; 
+export default MyEventsScreen; 

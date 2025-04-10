@@ -84,23 +84,32 @@ const RegisterScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
-      const userData = await registerUser({ name, email, password });
+      // Note: The backend doesn't use the name field, but we're keeping it for UI purposes
+      const result = await registerUser({ name, email, password });
       
-      // Show success message
-      Alert.alert(
-        'Registration Successful',
-        'Your account has been created successfully!',
-        [
-          { 
-            text: 'Login Now',
-            onPress: () => navigation.navigate('Login')
-          }
-        ]
-      );
+      if (result.success) {
+        // Show success message
+        Alert.alert(
+          'Registration Successful',
+          'Your account has been created successfully!',
+          [
+            { 
+              text: 'Login Now',
+              onPress: () => navigation.navigate('Login', { email })
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Registration Failed',
+          result.message || 'Unable to create your account. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error) {
       Alert.alert(
         'Registration Failed',
-        'Unable to create your account. Please try again.',
+        error.message || 'Unable to create your account. Please try again.',
         [{ text: 'OK' }]
       );
       console.error('Registration error:', error);

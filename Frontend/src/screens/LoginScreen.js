@@ -14,12 +14,14 @@ import {
   ActivityIndicator,
   Alert
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, baseStyles } from '../utils/styles';
 import { loginUser } from '../api/api';
 
-const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
+const LoginScreen = ({ navigation, route }) => {
+  // Check if we have an email passed from registration
+  const [email, setEmail] = useState(route.params?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -56,20 +58,28 @@ const LoginScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
-      const userData = await loginUser({ email, password });
+      const result = await loginUser({ email, password });
       
-      // In a real app, you would store the user token/data in a secure storage
-      console.log('Login successful:', userData);
-      
-      // Navigate to Home screen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
+      if (result.success) {
+        console.log('Login successful!');
+        
+        // Store authentication state
+        await AsyncStorage.setItem('isLoggedIn', 'true');
+        await AsyncStorage.setItem('userEmail', email);
+        
+        // Navigate back to the main screen
+        navigation.navigate('MainTabs');
+      } else {
+        Alert.alert(
+          'Login Failed',
+          result.message || 'Invalid email or password. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error) {
       Alert.alert(
         'Login Failed',
-        'Invalid email or password. Please try again.',
+        error.message || 'Invalid email or password. Please try again.',
         [{ text: 'OK' }]
       );
       console.error('Login error:', error);
@@ -78,9 +88,10 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  // Handle demo login
+  // Handle demo login - you can keep this if you want to provide a quick way to test
   const handleDemoLogin = () => {
-    setEmail('user@example.com');
+    // You might want to update these values if you have test credentials in your backend
+    setEmail('test@example.com');
     setPassword('password');
   };
 

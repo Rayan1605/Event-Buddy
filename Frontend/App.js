@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './src/utils/styles';
 
 // Import screens
@@ -18,6 +19,7 @@ import RegisterScreen from './src/screens/RegisterScreen';
 // Create navigation stacks
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const AuthStack = createNativeStackNavigator();
 
 // Main tab navigator
 function MainTabNavigator() {
@@ -74,48 +76,53 @@ function MainTabNavigator() {
 // Auth navigator
 function AuthNavigator() {
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
-        headerShown: false
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-    </Stack.Navigator>
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Register" component={RegisterScreen} />
+    </AuthStack.Navigator>
   );
 }
 
 // Main app component
 export default function App() {
-  // For demo purposes, we're setting isAuthenticated to true
-  // In a real app, this would be determined by checking if a valid token exists
-  const isAuthenticated = true;
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Function to handle authentication state changes
+  const handleAuthChange = (state) => {
+    setIsAuthenticated(state);
+  };
+
+  useEffect(() => {
+    // Check for existing auth session
+    const checkAuthStatus = async () => {
+      try {
+        // We'll always start with the login screen
+        setIsAuthenticated(false);
+        await AsyncStorage.removeItem('isLoggedIn');
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuthStatus();
+  }, []);
+
+  if (isLoading) {
+    // You might want to show a splash screen here
+    return null;
+  }
 
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="auto" />
-        <Stack.Navigator 
-          screenOptions={{ 
-            headerShown: false
-          }}
-        >
-          {isAuthenticated ? (
-            // App screens
-            <>
-              <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-              <Stack.Screen 
-                name="EventDetails" 
-                component={EventDetailsScreen}
-                options={{ 
-                  headerShown: false
-                }}
-              />
-            </>
-          ) : (
-            // Auth screens
-            <Stack.Screen name="Auth" component={AuthNavigator} />
-          )}
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+          <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

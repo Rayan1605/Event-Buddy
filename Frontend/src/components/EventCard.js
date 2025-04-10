@@ -62,7 +62,7 @@ const EventCard = ({ event, onPress }) => {
         {event.tags && event.tags.length > 0 && (
           <View style={styles.tagsContainer}>
             {event.tags.slice(0, 2).map((tag, index) => (
-              <View key={index} style={styles.tag}>
+              <View key={`${tag}-${index}`} style={styles.tag}>
                 <Text style={styles.tagText}>{tag}</Text>
               </View>
             ))}
